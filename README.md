@@ -1,94 +1,141 @@
-# Agentic RAG Pipeline with PDF & Web Scraping Support
+# DocuWeb RAG
 
-This repository provides an **Agentic Retrieval-Augmented Generation (RAG)** solution. It allows you to query information from both uploaded PDF documents and provided website links. A built-in intelligent agent evaluates your question to decide whether it can be answered using the provided context, or if an external online search is necessary.
+An agentic Retrieval-Augmented Generation (RAG) pipeline that answers questions from uploaded PDF documents and website content. When the local knowledge base cannot answer a question, the system falls back to a live DuckDuckGo web search.
 
-## Highlights
+---
 
-1. **PDF Processing**: Upload your PDF documents and extract their text for direct question answering.
-2. **Web Content Extraction**: Input website URLs to fetch content and utilize it as knowledge base material.
-3. **Hybrid Retrieval**: Combine both PDF and web resources into a unified vector database to retrieve comprehensive answers.
-4. **Smart Agent Routing**: 
-    - First, attempts to find the answer within the processed PDF context.
-    - If missing, checks the extracted web content.
-    - If the context does not contain the answer, it determines that the question is out-of-scope for the RAG database.
-5. **Web Search Fallback**: Automatically falls back to DuckDuckGo search if the database cannot provide an answer.
+## Features
+
+- **PDF ingestion**: Upload one or more PDF files and extract their text for indexing.
+- **Website ingestion**: Provide URLs to scrape and index web page content.
+- **Deep crawl**: Optionally follow all internal links on a given website to extract content from every page.
+- **Local embeddings**: Text is embedded using `all-MiniLM-L6-v2` from sentence-transformers, running fully on your machine with no external API required.
+- **In-memory vector store**: Qdrant runs in-memory, so no Docker or external server setup is needed.
+- **LLM generation**: Answers are generated using the Groq API (free tier).
+- **Intelligent routing**: Before generating an answer, the system checks whether the retrieved context is sufficient. If not, it falls back to DuckDuckGo web search.
+- **Evaluation metrics**: Every query is scored across four dimensions and results can be exported as JSON.
+
+---
+
+## Evaluation Metrics
+
+All metrics are computed locally without any external evaluation API.
+
+| Metric | Description |
+| --- | --- |
+| Answer Relevance | Cosine similarity between the question embedding and the answer embedding. Measures how on-topic the answer is. |
+| Faithfulness | Cosine similarity between the retrieved context embedding and the answer embedding. Measures how grounded the answer is in the source material. |
+| Retrieval Score | Mean cosine similarity of the top-k retrieved chunks to the query. Measures retrieval quality. |
+| Latency | End-to-end time broken down into retrieval time and generation time. |
+| Word Count | Number of words in the generated answer. |
+
+An aggregate statistics dashboard shows averages across all queries in a session. Individual query results can be exported as a JSON file.
+
+---
 
 ## Technology Stack
 
-- **Streamlit**: For the interactive web interface.
-- **PyPDF2**: For PDF text extraction.
-- **BeautifulSoup**: For parsing and scraping HTML web content.
-- **OpenAI API**: For computing vector embeddings and generating responses.
-- **Qdrant**: As the local vector database for semantic similarity searches.
-- **DuckDuckGo Search**: For online web search capabilities when local context is insufficient.
+| Component | Technology |
+| --- | --- |
+| UI | Streamlit |
+| PDF parsing | PyPDF2 |
+| Web scraping | BeautifulSoup4, Requests |
+| Text chunking | LangChain Text Splitters |
+| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
+| Vector store | Qdrant (in-memory) |
+| LLM | Groq API |
+| Web search fallback | DuckDuckGo (ddgs) |
 
-## Quick Start
+---
 
-### 1. Clone the Project
+## Requirements
+
+- Python 3.9 or higher
+- A free Groq API key from [console.groq.com](https://console.groq.com)
+
+---
+
+## Installation
+
+1. Clone the repository:
+
 ```bash
-git clone <your-github-repo-url>
-cd Agentic_RAG
+git clone <your-repo-url>
+cd DocuWeb-RAG
 ```
 
-### 2. Install Requirements
+2. Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Initialize Qdrant
-- Ensure you have [Qdrant](https://qdrant.tech/documentation/quick_start/) installed.
-- Run Qdrant locally so it is accessible at `http://localhost:6333`.
+The sentence-transformer model (`all-MiniLM-L6-v2`) will be downloaded automatically on first run.
 
-## How to Use
+---
 
-1. **Launch the App:**
-    ```bash
-    streamlit run app.py
-    ```
+## Running the App
 
-2. **Set API Key:**
-   - Enter your OpenAI API Key into the application's sidebar/input field.
+```bash
+streamlit run app.py
+```
 
-3. **Provide Knowledge Sources:**
-   - Upload one or more PDF files.
-   - Enter website URLs separated by commas.
-   - Check the crawling option if you want to extract text from all interlinked pages.
+Open [http://localhost:8501](http://localhost:8501) in your browser.
 
-4. **Index the Data:**
-   - Hit "Process and Index Documents". This will split the text, create embeddings, and load them into Qdrant.
+---
 
-5. **Query the System:**
-   - Type in your question.
-   - The agent will evaluate the sources:
-       - First checks the uploaded PDFs.
-       - Then checks the provided web URLs.
-       - Finally, performs a web search if the information is completely missing from your uploaded context.
+## Usage
 
-## Configuration Details
+1. **Enter your Groq API key** in the sidebar. Get one for free at [console.groq.com](https://console.groq.com).
 
-- **OpenAI API Key**: Required for the `gpt-4o-mini` language model and `text-embedding-3-small` embeddings.
-- **Qdrant**: By default, the app expects a local Qdrant instance running on port 6333. Update `app.py` if you use a cloud instance.
+2. **Add knowledge sources** in the sidebar:
+   - Upload one or more PDF files, or
+   - Paste website URLs (one per line or comma-separated), or
+   - Use both at the same time.
+
+3. **Configure settings** (optional):
+   - Enable "Deep crawl" to follow all internal links on provided URLs.
+   - Adjust chunk size to control how text is split for indexing.
+   - Adjust the top-k slider to control how many chunks are retrieved per query.
+
+4. **Click "Process and Index Documents"** to extract, embed, and store all content.
+
+5. **Ask a question** in the "Ask a Question" tab. The system will:
+   - Retrieve the most relevant chunks from the index.
+   - Decide whether the context is sufficient to answer.
+   - If yes, generate an answer from the indexed content.
+   - If no, fall back to a live DuckDuckGo search and generate an answer from the web results.
+
+6. **View metrics** in the "Evaluation Metrics" tab after running queries.
+
+---
+
+## Notes
+
+- The vector index is in-memory and resets each time the app restarts. Re-index your documents after each restart.
+- DuckDuckGo search is rate-limited. If the fallback fails, the app retries up to three times with a short delay and will display a warning if all attempts fail.
+- The Groq free tier is rate-limited at the organization level. If you hit limits, wait a moment and retry.
+- To find which models are available on your Groq account, run:
+
+```bash
+curl -X GET "https://api.groq.com/openai/v1/models" \
+     -H "Authorization: Bearer YOUR_GROQ_API_KEY"
+```
+
+Update the `GROQ_MODEL` constant in `app.py` to match a model available on your account.
+
+---
 
 ## Dependencies
 
-Make sure you are using Python 3.8+ (tested on 3.12). Below are the core packages used:
-- `streamlit`
-- `PyPDF2`
-- `beautifulsoup4`
-- `qdrant-client`
-- `litellm`
-- `duckduckgo_search`
-- `langchain_text_splitters`
-
-Install them all simultaneously via `pip install -r requirements.txt`.
-
-## FAQ
-
-**Q: Can I use both PDFs and URLs at the same time?**
-Yes. The system indexes both sources and will query across the unified dataset, prioritizing the highest similarity matches.
-
-**Q: Does the agent answer random questions not in the text?**
-No. If the answer is absent from the provided context, the agent will clearly state that it cannot answer using the internal database, before potentially relying on the web search fallback.
-
-**Q: What if the app fails to connect to Qdrant?**
-Ensure that the Qdrant server is successfully running in a separate terminal or Docker container on `localhost:6333` prior to indexing your documents.
+```
+streamlit
+PyPDF2
+langchain-text-splitters
+sentence-transformers
+qdrant-client
+ddgs
+beautifulsoup4
+groq
+requests
+```
